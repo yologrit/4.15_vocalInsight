@@ -1,0 +1,850 @@
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  ArrowLeft, Play, Star, Music,
+  Pause, Mail, ShieldCheck,
+  BarChart3, Check, Circle, CheckCircle2, Edit3, StickyNote, Trash2, X
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { mockLyrics, techniqueDetails } from "@/components/vocal-notes/types";
+import LyricLineItem from "@/components/vocal-notes/LyricLineItem";
+import AnnotationPanel from "@/components/vocal-notes/AnnotationPanel";
+import { toast } from "sonner";
+
+const VocalNotesPage = () => {
+  const navigate = useNavigate();
+  const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [hoveredTechnique, setHoveredTechnique] = useState<string | null>(null);
+  const [hoveredTechniqueKey, setHoveredTechniqueKey] = useState<string | null>(null);
+  const [pinnedTechnique, setPinnedTechnique] = useState<string | null>(null);
+  const [pinnedTechniqueKey, setPinnedTechniqueKey] = useState<string | null>(null);
+  const [hoveredBreath, setHoveredBreath] = useState(false);
+  const [pinnedBreath, setPinnedBreath] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlayLine, setCurrentPlayLine] = useState(-1);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [showRegisterDialog, setShowRegisterDialog] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [analysisMode, setAnalysisMode] = useState(false);
+  const [selectedForAnalysis, setSelectedForAnalysis] = useState<number[]>([]);
+  const [editMode, setEditMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<"text" | "circle">("text");
+  const [activeColor, setActiveColor] = useState<string>("text-blue-600/80");
+  const [annotations, setAnnotations] = useState<{ 
+    id: string; 
+    type: "text" | "circle" | "highlight";
+    text?: string; 
+    color: string; 
+    x: number; 
+    y: number; 
+    rotation: number;
+    width?: number;
+    height?: number;
+  }[]>([]);
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [currentNoteText, setCurrentNoteText] = useState("");
+  const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number } | null>(null);
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [hoveredAnnotationId, setHoveredAnnotationId] = useState<string | null>(null);
+
+  const annotationColors = {
+    text: "text-primary/80",
+    circle: "stroke-primary/40",
+    highlight: "fill-primary/20"
+  };
+
+  const availableColors = [
+    { name: "墨蓝", value: "text-blue-600/80", bg: "bg-blue-600/80", border: "border-blue-600/20" },
+    { name: "朱红", value: "text-red-500/80", bg: "bg-red-500/80", border: "border-red-500/20" },
+    { name: "明黄", value: "text-yellow-500/80", bg: "bg-yellow-500/80", border: "border-yellow-500/20" },
+    { name: "草绿", value: "text-green-500/80", bg: "bg-green-500/80", border: "border-green-500/20" },
+  ];
+
+  const getShapeColor = (colorValue: string, type: string) => {
+    if (type === "highlight") {
+      return colorValue.replace("text-", "bg-").replace("/80", "/50");
+    }
+    return colorValue;
+  };
+  
+  // Registration form states
+  const [account, setAccount] = useState("");
+  const [code, setCode] = useState("");
+  const [countdown, setCountdown] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (countdown > 0) {
+      countdownRef.current = setTimeout(() => setCountdown(countdown - 1), 1000);
+    } else if (countdown === 0 && countdownRef.current) {
+      clearTimeout(countdownRef.current);
+    }
+    return () => {
+      if (countdownRef.current) clearTimeout(countdownRef.current);
+    };
+  }, [countdown]);
+
+  const handleSendCode = () => {
+    if (!account) {
+      toast.error("请输入手机号或邮箱");
+      return;
+    }
+    // Simple validation for email or phone
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(account);
+    const isPhone = /^1[3-9]\d{9}$/.test(account);
+    
+    if (!isEmail && !isPhone) {
+      toast.error("请输入正确的手机号或邮箱格式");
+      return;
+    }
+
+    setCountdown(60);
+    toast.success("验证码已发送，请注意查收");
+    // Mock code for demo
+    console.log("Mock verification code: 123456");
+  };
+
+  const handleLogin = () => {
+    if (!account || !code) {
+      toast.error("请填写完整信息");
+      return;
+    }
+    if (code !== "123456") {
+      toast.error("验证码不正确 (演示码: 123456)");
+      return;
+    }
+
+    setIsSubmitting(true);
+    // Simulate API call
+    setTimeout(() => {
+      setIsRegistered(true);
+      setShowRegisterDialog(false);
+      setIsSubmitting(false);
+      toast.success("登录成功！");
+      // If they were trying to favorite, do it now
+      setIsFavorited(true);
+      toast.success("已添加到收藏夹");
+    }, 1000);
+  };
+
+  const handleFavorite = () => {
+    if (!isRegistered) {
+      setShowRegisterDialog(true);
+      return;
+    }
+    setIsFavorited(!isFavorited);
+    toast.success(isFavorited ? "已取消收藏" : "已添加到收藏夹");
+  };
+
+  const handleLineClick = (index: number) => {
+    setSelectedLine(index);
+  };
+
+  const handlePlay = () => {
+    if (isPlaying) {
+      // Pause: stop interval but keep currentPlayLine (stays bold)
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setIsPlaying(false);
+      return;
+    }
+    setIsPlaying(true);
+    const startLine = currentPlayLine >= 0 ? currentPlayLine : 0;
+    setCurrentPlayLine(startLine);
+    let line = startLine;
+    intervalRef.current = setInterval(() => {
+      line++;
+      if (line >= mockLyrics.length) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setIsPlaying(false);
+        setCurrentPlayLine(-1);
+      } else {
+        setCurrentPlayLine(line);
+      }
+    }, 2000);
+  };
+
+  const handleTechniqueHover = useCallback((type: string | null, lineIndex?: number, techIndex?: number) => {
+    setHoveredTechnique(type);
+    setHoveredTechniqueKey(type !== null && lineIndex !== undefined && techIndex !== undefined ? `${lineIndex}-${techIndex}` : null);
+  }, []);
+
+  const handleTechniquePin = useCallback((type: string | null, lineIndex?: number, techIndex?: number) => {
+    setPinnedTechnique((prev) => (prev === type && pinnedTechniqueKey === (lineIndex !== undefined ? `${lineIndex}-${techIndex}` : null) ? null : type));
+    setPinnedTechniqueKey((prev) => {
+      const newKey = lineIndex !== undefined && techIndex !== undefined ? `${lineIndex}-${techIndex}` : null;
+      return prev === newKey ? null : newKey;
+    });
+    setPinnedBreath(false);
+  }, [pinnedTechniqueKey]);
+
+  const handleBreathHover = useCallback((hover: boolean) => {
+    setHoveredBreath(hover);
+  }, []);
+
+  const handleBreathPin = useCallback(() => {
+    setPinnedBreath((prev) => !prev);
+    setPinnedTechnique(null);
+  }, []);
+
+  // Continuous selection logic for analysis mode
+  const handleAnalysisSelect = (index: number) => {
+    setSelectedForAnalysis(prev => {
+      if (prev.includes(index)) {
+        // Deselecting: only allow if it doesn't break continuity
+        const remaining = prev.filter(x => x !== index);
+        if (remaining.length === 0) return remaining;
+        const sorted = [...remaining].sort((a, b) => a - b);
+        // Check continuity
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i] - sorted[i - 1] !== 1) {
+            toast.info("为了分析准确，请保持选择的乐句连续");
+            return prev; // would break continuity
+          }
+        }
+        return remaining;
+      } else {
+        // Adding: must be adjacent to existing selection
+        if (prev.length === 0) return [index];
+        const sorted = [...prev].sort((a, b) => a - b);
+        const min = sorted[0];
+        const max = sorted[sorted.length - 1];
+        if (index === min - 1 || index === max + 1) {
+          return [...prev, index];
+        }
+        // If not adjacent, show hint
+        if (index < min - 1 || index > max + 1) {
+          toast.info("请选择与当前选中项相邻的乐句，保持分析连续性");
+          return prev;
+        }
+        return prev;
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedForAnalysis.length === mockLyrics.length) {
+      setSelectedForAnalysis([]);
+    } else {
+      setSelectedForAnalysis(mockLyrics.map((_, i) => i));
+    }
+  };
+
+  const handleLyricsClick = (e: React.MouseEvent) => {
+    if (!editMode || !lyricsContainerRef.current) return;
+    
+    // If clicking a button or existing annotation, don't add a new one
+    if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('.annotation-item')) return;
+
+    const container = lyricsContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    
+    // Calculate coordinates relative to the scrollable content
+    // We want the annotation to be centered on the click
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top + container.scrollTop) / container.scrollHeight) * 100;
+
+    if (activeTool === "text") {
+      setPendingCoords({ x, y });
+      setCurrentNoteText("");
+      setNoteDialogOpen(true);
+    } else {
+      // Add shape directly
+      const newAnnotation = {
+        id: Math.random().toString(36).substr(2, 9),
+        type: activeTool,
+        color: getShapeColor(activeColor, activeTool),
+        x: x - (activeTool === "circle" ? 4 : 6), // Offset to center horizontally (~80px/120px width)
+        y: y - (activeTool === "circle" ? 2 : 1.5), // Offset to center vertically
+        rotation: Math.floor(Math.random() * 10) - 5,
+        width: activeTool === "circle" ? 80 : 120,
+        height: activeTool === "circle" ? 40 : 24,
+      };
+      setAnnotations([...annotations, newAnnotation]);
+    }
+  };
+
+  const saveNote = () => {
+    if (!currentNoteText.trim() || !pendingCoords) return;
+    const newAnnotation = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: "text" as const,
+      text: currentNoteText,
+      color: activeColor,
+      x: pendingCoords.x - 2, // Slight offset to center text better
+      y: pendingCoords.y - 1,
+      rotation: Math.floor(Math.random() * 4) - 2,
+    };
+    setAnnotations([...annotations, newAnnotation]);
+    setNoteDialogOpen(false);
+    setCurrentNoteText("");
+    setPendingCoords(null);
+  };
+
+  const handleAnnotationDragStart = (e: React.DragEvent, anno: { id: string; x: number; y: number }) => {
+    if (!editMode) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
+
+  const handleAnnotationDragEnd = (id: string, e: React.DragEvent) => {
+    if (!editMode || !lyricsContainerRef.current || !dragOffset) return;
+    
+    // Some browsers return 0,0 on drag end if cancelled or just weirdly
+    if (e.clientX === 0 && e.clientY === 0) return;
+
+    const container = lyricsContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    
+    // Calculate new position accounting for the grab offset
+    const x = ((e.clientX - dragOffset.x - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - dragOffset.y - rect.top + container.scrollTop) / container.scrollHeight) * 100;
+
+    setAnnotations(prev => prev.map(n => n.id === id ? { ...n, x, y } : n));
+    setDragOffset(null);
+  };
+
+  const deleteAnnotation = (id: string) => {
+    setAnnotations(annotations.filter(n => n.id !== id));
+  };
+
+  const clearAllAnnotations = () => {
+    setAnnotations([]);
+    toast.success("已清除所有笔记");
+  };
+
+
+  const showBreathInfo = pinnedBreath || (!pinnedTechnique && !hoveredTechnique && hoveredBreath);
+  const getActiveTechInfo = (): { type: string | null; key: string | null } => {
+    if (showBreathInfo) return { type: null, key: null };
+    if (hoveredTechnique) return { type: hoveredTechnique, key: hoveredTechniqueKey };
+    if (pinnedTechnique) return { type: pinnedTechnique, key: pinnedTechniqueKey };
+    
+    if (selectedLine !== null) {
+      const line = mockLyrics[selectedLine];
+      if (line && line.techniques.length > 0) {
+        // Check for transition (adjacent techniques)
+        if (line.techniques.length >= 2) {
+          const t1 = line.techniques[0];
+          const t2 = line.techniques[1];
+          if (Math.abs(t1.endIdx - t2.startIdx) <= 1) {
+            const transitionKey = `${t1.type}-${t2.type}`;
+            if (techniqueDetails[transitionKey]) {
+              return { type: transitionKey, key: `${selectedLine}-0` };
+            }
+          }
+        }
+        return { type: line.techniques[0].type, key: `${selectedLine}-0` };
+      }
+    }
+    return { type: null, key: null };
+  };
+
+  const activeTechInfo = getActiveTechInfo();
+  const activeTech = activeTechInfo.type;
+  const activeTechKey = activeTechInfo.key;
+
+  return (
+    <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
+      {/* Topbar — AI Coach aligned */}
+      <div className="h-14 border-b border-border/60 flex items-center px-5 gap-3 flex-shrink-0 bg-background/90 backdrop-blur-md z-30">
+        <button
+          onClick={() => navigate("/coach")}
+          className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-foreground truncate">《起风了》声乐笔记</span>
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 flex-shrink-0">示范</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">AI Coach · VocalInsight</p>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-success/10 border border-success/20">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
+          </span>
+          <span className="text-[10px] font-medium text-success">在线</span>
+        </div>
+
+        <button
+          onClick={handleFavorite}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+            isFavorited
+              ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/30"
+              : "bg-transparent text-muted-foreground border-border hover:border-primary/30 hover:text-foreground"
+          }`}
+        >
+          <Star className={`w-3.5 h-3.5 ${isFavorited ? "fill-current" : ""}`} />
+          {isFavorited ? "已收藏" : "收藏"}
+        </button>
+      </div>
+
+      {/* Song Hero — immersive gradient banner */}
+      <div className="relative flex-shrink-0 overflow-hidden border-b border-border/60">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/8 to-background pointer-events-none" />
+        <div className="relative flex items-center gap-4 px-6 py-4">
+          {/* Album art */}
+          <div className="relative flex-shrink-0">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Music className="w-8 h-8 text-primary-foreground" />
+            </div>
+            {isPlaying && (
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-success flex items-center justify-center shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-success-foreground animate-pulse" />
+              </span>
+            )}
+          </div>
+          {/* Song meta */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-bold tracking-tight leading-tight">起风了</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">买辣椒也用券 · 声乐笔记分析</p>
+            <div className="flex items-center gap-2 mt-2">
+              {["混声", "颤音", "假声", "滑音"].map((tag) => (
+                <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium border border-primary/15">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* Play button */}
+          <button
+            onClick={handlePlay}
+            className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 ${
+              isPlaying
+                ? "bg-foreground text-background shadow-foreground/20"
+                : "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-primary/30 hover:shadow-primary/50 hover:scale-105"
+            }`}
+          >
+            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+          </button>
+        </div>
+        {/* Bottom fade */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left: Lyrics panel */}
+        <div
+          ref={lyricsContainerRef}
+          onClick={handleLyricsClick}
+          onDragOver={(e) => e.preventDefault()}
+          className={`flex-1 overflow-y-auto px-6 py-8 relative bg-background ${editMode ? "cursor-crosshair" : ""}`}
+        >
+          {editMode && (
+            <div className="absolute inset-0 bg-primary/[0.02] border-2 border-dashed border-primary/20 pointer-events-none z-10 rounded-none" />
+          )}
+          <div className={`max-w-2xl mx-auto space-y-1 pr-28 relative ${editMode ? "pointer-events-none select-none" : ""}`}>
+            {mockLyrics.map((line, i) => (
+              <div key={i} className="relative group flex items-center gap-2">
+                {analysisMode && (
+                  <button
+                    onClick={() => handleAnalysisSelect(i)}
+                    className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                      selectedForAnalysis.includes(i)
+                        ? "bg-primary border-primary text-primary-foreground shadow-sm shadow-primary/30"
+                        : "border-border hover:border-primary/50 bg-background"
+                    }`}
+                  >
+                    {selectedForAnalysis.includes(i) && <Check className="w-3 h-3" />}
+                  </button>
+                )}
+                <div className="flex-1">
+                  <LyricLineItem
+                    line={line}
+                    index={i}
+                    isSelected={selectedLine === i}
+                    isPlaying={currentPlayLine === i}
+                    onSelect={handleLineClick}
+                    onTechniqueHover={handleTechniqueHover}
+                    onTechniquePin={handleTechniquePin}
+                    onBreathHover={handleBreathHover}
+                    onBreathPin={handleBreathPin}
+                  />
+                </div>
+              </div>
+            ))}
+
+            {/* Free-form Annotations */}
+            {annotations.map((anno) => {
+              const isHovered = hoveredAnnotationId === anno.id;
+              return (
+              <div
+                key={anno.id}
+                draggable={editMode && isHovered}
+                onDragStart={(e) => handleAnnotationDragStart(e, anno)}
+                onDragEnd={(e) => handleAnnotationDragEnd(anno.id, e)}
+                onMouseEnter={() => editMode && setHoveredAnnotationId(anno.id)}
+                onMouseLeave={() => editMode && setHoveredAnnotationId(null)}
+                className={`absolute z-20 transition-all annotation-item ${editMode ? "pointer-events-auto" : "pointer-events-auto"}`}
+                style={{ 
+                  left: `${anno.x}%`, 
+                  top: `${anno.y}%`, 
+                  transform: `rotate(${anno.rotation}deg)`,
+                }}
+              >
+                {/* Selection outline + drag handle (only on hover in edit mode) */}
+                {editMode && isHovered && (
+                  <div className="absolute inset-0 -m-1.5 border-2 border-dashed border-primary/50 rounded-md pointer-events-none" />
+                )}
+
+                {/* Drag handle indicator */}
+                {editMode && isHovered && (
+                  <div className="absolute -left-6 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 cursor-grab pointer-events-auto opacity-80">
+                    <div className="w-1 h-1 rounded-full bg-primary/60" />
+                    <div className="w-1 h-1 rounded-full bg-primary/60" />
+                    <div className="w-1 h-1 rounded-full bg-primary/60" />
+                    <div className="w-1 h-1 rounded-full bg-primary/60" />
+                    <div className="w-1 h-1 rounded-full bg-primary/60" />
+                    <div className="w-1 h-1 rounded-full bg-primary/60" />
+                  </div>
+                )}
+
+                {anno.type === "text" ? (
+                  <div className={`relative ${anno.color}`} style={{ fontFamily: "'Kalam', cursive, sans-serif" }}>
+                    <p className={`text-[14px] leading-relaxed font-medium select-none whitespace-nowrap ${editMode && isHovered ? 'cursor-move' : ''}`}>
+                      {anno.text}
+                    </p>
+                    {/* Hand-drawn underline effect */}
+                    <svg className="absolute -bottom-1 left-0 w-full h-2 opacity-40" preserveAspectRatio="none">
+                      <path d="M 0 5 Q 50 2 100 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                    </svg>
+                  </div>
+                ) : anno.type === "circle" ? (
+                  <svg width={anno.width} height={anno.height} viewBox="0 0 100 50" className={`${anno.color} ${editMode && isHovered ? 'cursor-move' : ''}`}>
+                    <path 
+                      d="M 5 25 C 5 5, 95 5, 95 25 C 95 45, 5 45, 8 28" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round"
+                      className="animate-in fade-in duration-700"
+                    />
+                  </svg>
+                ) : (
+                  <div 
+                    className={`h-6 rounded-sm ${anno.color} ${editMode && isHovered ? 'cursor-move' : ''}`}
+                    style={{ width: anno.width, opacity: 0.5 }}
+                  />
+                )}
+
+                {/* Delete button - only visible on hover in edit mode */}
+                {editMode && isHovered && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteAnnotation(anno.id);
+                    }}
+                    className="absolute -top-3 -right-3 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-md hover:scale-110 transition-all z-30 pointer-events-auto"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+            })}
+
+            {/* Key sections */}
+            <div className="mt-10 pt-6 border-t border-border/60">
+              {/* Section header */}
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full bg-primary" />
+                  <h3 className="text-sm font-bold tracking-tight">重点难点片段</h3>
+                </div>
+                {!analysisMode ? (
+                  <button
+                    onClick={() => setAnalysisMode(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold shadow-sm shadow-primary/30 hover:opacity-90 transition-all active:scale-95"
+                  >
+                    <BarChart3 className="w-3 h-3" /> 圈选歌词·唱功分析
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSelectAll}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-border text-xs text-muted-foreground hover:border-primary/30 hover:text-foreground transition-all"
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      {selectedForAnalysis.length === mockLyrics.length ? "取消全选" : "全选"}
+                    </button>
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                      {selectedForAnalysis.length > 0 ? `${selectedForAnalysis.length} 句` : "请选连续句"}
+                    </span>
+                    <button
+                      onClick={() => { setAnalysisMode(false); setSelectedForAnalysis([]); }}
+                      className="px-2.5 py-1.5 rounded-full border border-border text-xs text-muted-foreground hover:text-foreground transition-all"
+                    >
+                      取消
+                    </button>
+                    <button
+                      disabled={selectedForAnalysis.length === 0}
+                      onClick={() => {
+                        const selectedLyrics = selectedForAnalysis
+                          .sort((a, b) => a - b)
+                          .map(idx => mockLyrics[idx].lyrics)
+                          .join(" | ");
+                        navigate(`/coach?new=1&mode=singing-analysis&ref=qfl&lyrics=${encodeURIComponent(selectedLyrics)}`);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-40 transition-all active:scale-95"
+                    >
+                      <BarChart3 className="w-3 h-3" /> 进入分析
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Highlight cards */}
+              <div className="grid gap-2.5">
+                {[
+                  { label: "最值得模仿", labelColor: "text-primary bg-primary/10 border-primary/20", line: "心之所动 且就随缘去吧", reason: "混声过渡自然，颤音控制精准", lyrics: "心之所动 且就随缘去吧" },
+                  { label: "技巧最明显", labelColor: "text-warning bg-warning/10 border-warning/20", line: "逆着光行走 任风吹雨打", reason: "假声→直音切换，情感对比强烈", lyrics: "逆着光行走 任风吹雨打" },
+                  { label: "最适合练习", labelColor: "text-success bg-success/10 border-success/20", line: "不知不觉 已经翻山越岭", reason: "混声→假声转换，换声点清晰", lyrics: "不知不觉 已经翻山越岭" },
+                ].map((item, i) => (
+                  <div
+                    key={i}
+                    className="group flex items-center gap-3 p-3.5 rounded-2xl border border-border/60 bg-card hover:border-primary/25 hover:bg-accent/30 transition-all cursor-pointer"
+                  >
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border flex-shrink-0 ${item.labelColor}`}>
+                      {item.label}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold truncate leading-tight">{item.line}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{item.reason}</p>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/coach?new=1&mode=singing-analysis&ref=qfl&lyrics=${encodeURIComponent(item.lyrics)}`)}
+                      className="flex-shrink-0 text-[11px] font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity px-2.5 py-1 rounded-full hover:bg-primary/10"
+                    >
+                      练这句 →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Annotation panel */}
+        <div className="w-72 lg:w-80 border-l border-border/60 bg-card overflow-y-auto px-5 py-6 hidden md:flex flex-col gap-0">
+          {/* Panel header */}
+          <div className="flex items-center gap-2 mb-5 pb-4 border-b border-border/50">
+            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-soft" />
+            <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">技巧注解</span>
+          </div>
+          <AnnotationPanel
+            activeTechnique={activeTech}
+            activeTechniqueKey={activeTechKey}
+            selectedLine={selectedLine}
+            showBreathInfo={showBreathInfo}
+            onFavorite={handleFavorite}
+            isRegistered={isRegistered}
+          />
+        </div>
+
+        {/* Floating Action Button for Edit Mode — left side */}
+        <div className="absolute bottom-6 left-6 z-50 flex flex-col items-start gap-2.5">
+          {editMode && (
+            <div className="flex flex-col items-start gap-2 animate-in slide-in-from-bottom-4 duration-300">
+              {/* Color + tool panel */}
+              <div className="bg-card/95 backdrop-blur-xl border border-border/50 rounded-2xl p-3 shadow-2xl flex flex-col gap-3">
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-0.5">颜色</span>
+                <div className="flex gap-2 items-center">
+                  {availableColors.map((color) => (
+                    <button
+                      key={color.value}
+                      onClick={() => setActiveColor(color.value)}
+                      title={color.name}
+                      className={`w-7 h-7 rounded-full transition-all flex items-center justify-center ${color.bg} ${
+                        activeColor === color.value
+                          ? "ring-2 ring-offset-2 ring-offset-card ring-primary scale-110"
+                          : "hover:scale-110 opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      {activeColor === color.value && <Check className="w-3 h-3 text-white drop-shadow" />}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  {[
+                    { id: "text", icon: <StickyNote className="w-3.5 h-3.5" />, label: "文字" },
+                    { id: "circle", icon: <Circle className="w-3.5 h-3.5" />, label: "圈选" },
+                  ].map((tool) => (
+                    <button
+                      key={tool.id}
+                      onClick={() => setActiveTool(tool.id as "text" | "circle")}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                        activeTool === tool.id
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "bg-accent text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {tool.icon} {tool.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={clearAllAnnotations}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20 text-xs font-medium hover:bg-destructive/20 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> 清空
+              </button>
+            </div>
+          )}
+
+          {/* Status pill */}
+          <div className={`px-3 py-1.5 rounded-full text-xs font-semibold shadow-md transition-all ${
+            editMode
+              ? "bg-success text-success-foreground"
+              : "bg-foreground/90 text-background"
+          }`}>
+            {editMode ? `做笔记中 · ${activeTool === "text" ? "文字" : "圈选"}` : "点击开启做笔记 ✍️"}
+          </div>
+
+          {/* Main FAB */}
+          <button
+            onClick={() => {
+              setEditMode(!editMode);
+              setAnalysisMode(false);
+              if (!editMode) toast.info("进入编辑模式：选择工具并点击页面添加标注");
+            }}
+            className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-95 ${
+              editMode
+                ? "bg-success text-success-foreground rotate-12 shadow-success/30"
+                : "bg-primary text-primary-foreground shadow-primary/30 hover:scale-105"
+            }`}
+          >
+            {editMode ? <Check className="w-6 h-6" /> : <Edit3 className="w-6 h-6" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Note Dialog */}
+      <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
+        <DialogContent className="sm:max-w-[340px] rounded-2xl border-border/60">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                <StickyNote className="w-3.5 h-3.5 text-primary" />
+              </div>
+              添加批注
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              在此处记录你的心得或练习提醒
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-3">
+            <Textarea
+              value={currentNoteText}
+              onChange={(e) => setCurrentNoteText(e.target.value)}
+              placeholder="输入笔记内容..."
+              className="min-h-[90px] text-sm resize-none rounded-xl border-border/60 focus:border-primary/40 bg-accent/30"
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => { setNoteDialogOpen(false); setPendingCoords(null); }}>取消</Button>
+            <Button size="sm" className="rounded-xl bg-primary" onClick={saveNote}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Register Dialog */}
+      <Dialog open={showRegisterDialog} onOpenChange={setShowRegisterDialog}>
+        <DialogContent className="sm:max-w-[380px] p-0 overflow-hidden rounded-2xl border-border/60 shadow-2xl">
+          {/* Header */}
+          <div className="relative px-6 pt-6 pb-5 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold">欢迎加入 VocalInsight</h2>
+                <p className="text-xs text-muted-foreground">登录后永久保存你的声乐笔记</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-6 pb-6 space-y-4 bg-card">
+            <div className="space-y-1.5">
+              <Label htmlFor="account" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Mail className="w-3 h-3" /> 手机号 / 邮箱
+              </Label>
+              <Input
+                id="account"
+                placeholder="请输入手机号或邮箱"
+                value={account}
+                onChange={(e) => setAccount(e.target.value)}
+                className="h-10 rounded-xl bg-accent/40 border-border/50 focus:border-primary/40 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="code" className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <ShieldCheck className="w-3 h-3" /> 验证码
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="code"
+                  placeholder="6 位验证码"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="h-10 rounded-xl bg-accent/40 border-border/50 focus:border-primary/40 text-sm"
+                />
+                <Button
+                  variant="outline"
+                  className="h-10 px-3 min-w-[90px] rounded-xl text-xs font-semibold border-primary/25 text-primary hover:bg-primary/5"
+                  onClick={handleSendCode}
+                  disabled={countdown > 0}
+                >
+                  {countdown > 0 ? `${countdown}s` : "获取验证码"}
+                </Button>
+              </div>
+            </div>
+
+            <Button
+              className="w-full h-11 rounded-xl bg-primary text-primary-foreground font-bold text-sm shadow-sm shadow-primary/20 hover:opacity-90 transition-all"
+              onClick={handleLogin}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "登录中..." : "立即登录 / 注册"}
+            </Button>
+
+            <p className="text-[10px] text-center text-muted-foreground leading-relaxed">
+              登录即代表您同意{" "}
+              <span className="text-primary cursor-pointer hover:underline">用户协议</span>
+              {" "}和{" "}
+              <span className="text-primary cursor-pointer hover:underline">隐私政策</span>
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default VocalNotesPage;
