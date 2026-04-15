@@ -165,7 +165,7 @@ const ScrollTellingSection = () => {
           <div className="flex-[1.5] w-full">
             <AnimatePresence mode="wait">
               <motion.div key={activeIndex} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.4 }} className="rounded-2xl overflow-hidden border border-border shadow-lg">
-                <img src={coreFeatures[activeIndex].image} alt={coreFeatures[activeIndex].title} className="w-full h-auto" loading="lazy" width={800} height={600} />
+                <img src={coreFeatures[activeIndex].image} alt={coreFeatures[activeIndex].title} className="w-full h-auto" width={800} height={600} />
               </motion.div>
             </AnimatePresence>
           </div>
