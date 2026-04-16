@@ -108,12 +108,23 @@ const newChatIntroMessage: Message = {
 
 /* ── VocalNoteSummaryCard ── */
 const VocalNoteSummaryCard = ({ data, onViewFull }: { data: VocalNoteData; onViewFull: () => void }) => (
-  <div
-    onClick={onViewFull}
-    className="group cursor-pointer w-full max-w-lg rounded-2xl bg-white overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-    style={{ boxShadow: "0 2px 16px -4px rgba(79,70,229,0.10), 0 1px 3px rgba(0,0,0,0.04)" }}
-  >
-    <div className="p-5 space-y-4">
+  <div className="relative w-full max-w-lg">
+    {/* Floating Indicator */}
+    <div className="absolute -top-3 -left-2 z-10 animate-bounce pointer-events-none">
+      <div className="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5 border-2 border-white">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+        </span>
+        点击查看示例
+      </div>
+    </div>
+    <div
+      onClick={onViewFull}
+      className="group cursor-pointer w-full h-full rounded-2xl bg-white overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      style={{ boxShadow: "0 2px 16px -4px rgba(79,70,229,0.10), 0 1px 3px rgba(0,0,0,0.04)" }}
+    >
+      <div className="p-5 space-y-4">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -169,6 +180,7 @@ const VocalNoteSummaryCard = ({ data, onViewFull }: { data: VocalNoteData; onVie
         查看完整分析 <ChevronRight className="w-3.5 h-3.5" />
       </div>
     </div>
+  </div>
   </div>
 );
 
@@ -238,12 +250,23 @@ const UploadGuideCard = () => (
 
 /* ── SingingAnalysisSummaryCard ── */
 const SingingAnalysisSummaryCard = ({ data, onViewFull }: { data: SingingAnalysisData; onViewFull: () => void }) => (
-  <div
-    onClick={onViewFull}
-    className="group cursor-pointer w-full max-w-lg rounded-2xl bg-white overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
-    style={{ boxShadow: "0 2px 16px -4px rgba(79,70,229,0.10), 0 1px 3px rgba(0,0,0,0.04)" }}
-  >
-    <div className="p-5 space-y-4">
+  <div className="relative w-full max-w-lg">
+    {/* Floating Indicator */}
+    <div className="absolute -top-3 -left-2 z-10 animate-bounce pointer-events-none" style={{ animationDelay: "0.2s" }}>
+      <div className="bg-indigo-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5 border-2 border-white">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+        </span>
+        点击查看示例
+      </div>
+    </div>
+    <div
+      onClick={onViewFull}
+      className="group cursor-pointer w-full h-full rounded-2xl bg-white overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      style={{ boxShadow: "0 2px 16px -4px rgba(79,70,229,0.10), 0 1px 3px rgba(0,0,0,0.04)" }}
+    >
+      <div className="p-5 space-y-4">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -301,6 +324,7 @@ const SingingAnalysisSummaryCard = ({ data, onViewFull }: { data: SingingAnalysi
         查看完整分析报告 <ChevronRight className="w-3.5 h-3.5" />
       </div>
     </div>
+  </div>
   </div>
 );
 
